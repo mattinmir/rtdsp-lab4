@@ -49,14 +49,16 @@ fs = 8000;
 
 % row vector of n+1 coefficients of the order n FIR filter whose 
 % frequency-amplitude characteristics match those given by vectors f and a
-b = firpm(n, fo, ao, w);
+order = n+4;
+b = firpm(order, fo, ao, w);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Output %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Save coefficients to a text file 'fir_coefs.txt'
-save fir_coefs.txt b -ASCII -DOUBLE -TABS
+format long;
+dlmwrite('H:\RTDSPlab\lab4\RTDSP\fir_coefs.txt', b, '\n');
 
 % Plotting freq response
 freqz(b,1,1024,fs);
