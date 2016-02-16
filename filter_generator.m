@@ -57,8 +57,18 @@ b = firpm(order, fo, ao, w);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Save coefficients to a text file 'fir_coefs.txt'
-format long;
-dlmwrite('H:\RTDSPlab\lab4\RTDSP\fir_coefs.txt', b, '\n');
+format long e;
+
+formatSpec = '%2.15e';
+coefs = num2str(b',formatSpec);
+coefs = cellstr(coefs);
+data = strjoin(coefs', ', ');
+
+fileID = fopen('H:\RTDSPlab\lab4\RTDSP\fir_coef.txt', 'w');
+fprintf(fileID, 'double b[]={');
+fprintf(fileID,data);
+fprintf (fileID, '};');
+fclose(fileID);
 
 % Plotting freq response
 freqz(b,1,1024,fs);
