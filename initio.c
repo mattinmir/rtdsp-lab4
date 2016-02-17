@@ -160,5 +160,21 @@ void non_circ_FIR(void)
 
 void circ_FIR(void)
 {
+	int newest = BUFFSIZE - 1;
+	int i, j;
+	x[newest] = sample;
+	newest--;
 	
+	// Wrap around to other side of buffer
+	if (newest < 0)
+		newest = BUFFSIZE - 1;
+		
+	
+	for (i = 0, j = newest; i < BUFSIZE; i++,j++)
+	{
+		if (j >= BUFSIZE)
+			j -= BUFSIZE
+		y += (x[j] * b[i]);
+		
+	}
 }
