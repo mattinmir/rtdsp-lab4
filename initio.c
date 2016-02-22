@@ -24,7 +24,7 @@
 #include <stdlib.h> 
 //  Included so program can make use of DSP/BIOS configuration tool.  
 #include "dsp_bios_cfg.h"
-
+#include "math.h"
 /* The file dsk6713.h must be included in every program that uses the BSL.  This 
    example also includes dsk6713_aic23.h because it uses the 
    AIC23 codec module (audio interface). */
@@ -68,6 +68,8 @@ DSK6713_AIC23_CodecHandle H_Codec;
 // Delay buffer
 double x[BUFSIZE];
 
+double x2[2*BUFSIZE];
+
 // Output of filter
 double y;
 
@@ -82,6 +84,8 @@ void ISR_AIC(void);
 void non_circ_FIR(void);
 void circ_FIR1(void);
 void circ_FIR2(void);
+void circ_FIR3(void);
+void circ_FIR4(void);
 /********************************** Main routine ************************************/
 void main(){      
 	int i;
@@ -92,8 +96,10 @@ void main(){
 	init_HWI();  	 		
 	
 	for(i = 0; i < BUFSIZE; i++)
+	{
 		x[i] = 0;
-	
+		x2[i] = 0;
+	}
   /* loop indefinitely, waiting for interrupts */  					
 	while(1){}
   
@@ -143,7 +149,7 @@ void ISR_AIC(void)
 {	
 	sample = mono_read_16Bit();
 	
-	circ_FIR1();
+	circ_FIR4();
 	  
 	mono_write_16Bit((short)y); 
 }
@@ -163,15 +169,13 @@ void non_circ_FIR(void)
 	
 }
 
+// Normal circle
 void circ_FIR1(void)
 {
 	
 	int i, j;
 	y = 0;
 	x[newest] = sample;
-	
-	
-		
 	
 	for (i = 0, j = newest; i < BUFSIZE; i++,j++)
 	{
@@ -181,17 +185,17 @@ void circ_FIR1(void)
 		 y += (x[j] * b[i]);
 	}
 	
-	newest--;
 	// Wrap around to other side of buffer
-	if (newest < 0)
+	if (--newest < 0)
 		newest = BUFSIZE - 1;
 }
 
+// Split loop
 void circ_FIR2(void)
 {
 	int i;
 	y = 0;
-	x[newest] = mono_read_16Bit(); // Read newest sample into buffer
+	x[newest] = sample; // Read newest sample into buffer
 	
 	
 	// Split convoluton into two loops
@@ -201,9 +205,48 @@ void circ_FIR2(void)
 	for (; i < BUFSIZE; i++)
 		y += (x[i-(BUFSIZE - newest)] * b[i]);
 		
-	newest--;
+	
 	// Wrap around to other side of buffer
-	if (newest < 0)
+	if (--newest < 0)
 		newest = BUFSIZE - 1;
 	
+}
+
+// Double size buffer
+void circ_FIR3(void)
+{
+	int i;
+	y = 0;
+	x2[newest] = x2[newest + BUFSIZE] = sample;
+	
+	for(i = 0; i < BUFSIZE; i++)
+		y += x2[newest +i]*b[i];
+	
+	if(--newest < 0)
+		newest = BUFSIZE -1;		
+}
+
+void circ_FIR4(void)
+{
+	int i, j, offset;
+	y = 0;
+	x[newest] = sample;
+	
+ 	for (i = 0, j = newest; i < BUFSIZE/2; i++,j--)
+	{
+		if (j >= BUFSIZE)
+			j -= BUFSIZE;
+		
+		offset = pow(2,i+1)-1;
+		/*if(j - offset )
+		*/
+		y += ((x[j] + x[j-offset]) * b[i]);
+	}
+	if (!(BUFSIZE % 2))
+	{
+		y -= x[j]* b[i];
+	}
+	// Wrap around to other side of buffer
+	if (--newest < 0)
+		newest = BUFSIZE - 1;
 }
