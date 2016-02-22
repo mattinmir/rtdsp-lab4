@@ -73,24 +73,29 @@ double y;
 
 // Input read from signal generator
 short sample;
+
+int newest;
 /******************************* Function prototypes ********************************/
 void init_hardware(void);     
 void init_HWI(void);          
 void ISR_AIC(void);        
 void non_circ_FIR(void);
-void circ_FIR(void);
-
+void circ_FIR1(void);
+void circ_FIR2(void);
 /********************************** Main routine ************************************/
 void main(){      
-
+	int i;
 // initialize board and the audio port
-  init_hardware();
+ 	init_hardware();
 	
   /* initialize hardware interrupts */
-  init_HWI();  	 		
-
+	init_HWI();  	 		
+	
+	for(i = 0; i < BUFSIZE; i++)
+		x[i] = 0;
+	
   /* loop indefinitely, waiting for interrupts */  					
-  while(1){}
+	while(1){}
   
 }
         
@@ -138,8 +143,9 @@ void ISR_AIC(void)
 {	
 	sample = mono_read_16Bit();
 	
-	non_circ_FIR();
-	 
+	newest = BUFSIZE - 1;
+	circ_FIR2();
+	  
 	mono_write_16Bit((short)y); 
 }
 
@@ -158,23 +164,43 @@ void non_circ_FIR(void)
 	
 }
 
-void circ_FIR(void)
+void circ_FIR1(void)
 {
-	int newest = BUFFSIZE - 1;
+	
 	int i, j;
+	y = 0;
 	x[newest] = sample;
 	newest--;
 	
 	// Wrap around to other side of buffer
 	if (newest < 0)
-		newest = BUFFSIZE - 1;
+		newest = BUFSIZE - 1;
 		
 	
 	for (i = 0, j = newest; i < BUFSIZE; i++,j++)
 	{
 		if (j >= BUFSIZE)
-			j -= BUFSIZE
-		y += (x[j] * b[i]);
-		
+			j -= BUFSIZE;
+			
+		 y += (x[j] * b[i]);
 	}
+}
+
+void circ_FIR2(void)
+{
+	int i;
+	y = 0;
+	x[newest] = sample; // Read newest sample into buffer
+	
+	// Split convoluton into two loops
+	for (i = 0; i < BUFSIZE - newest; i++)
+		y += (x[newest+i] * b[i]);
+		
+	for (; i < BUFSIZE; i++)
+		y += (x[i-newest] * b[i]);
+		
+	newest--;
+	// Wrap around to other side of buffer
+	if (newest < 0)
+		newest = BUFSIZE - 1;
 }
