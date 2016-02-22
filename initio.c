@@ -74,7 +74,7 @@ double y;
 // Input read from signal generator
 short sample;
 
-int newest;
+int newest = BUFSIZE - 1;
 /******************************* Function prototypes ********************************/
 void init_hardware(void);     
 void init_HWI(void);          
@@ -143,8 +143,7 @@ void ISR_AIC(void)
 {	
 	sample = mono_read_16Bit();
 	
-	newest = BUFSIZE - 1;
-	circ_FIR2();
+	circ_FIR1();
 	  
 	mono_write_16Bit((short)y); 
 }
@@ -170,11 +169,8 @@ void circ_FIR1(void)
 	int i, j;
 	y = 0;
 	x[newest] = sample;
-	newest--;
 	
-	// Wrap around to other side of buffer
-	if (newest < 0)
-		newest = BUFSIZE - 1;
+	
 		
 	
 	for (i = 0, j = newest; i < BUFSIZE; i++,j++)
@@ -184,23 +180,30 @@ void circ_FIR1(void)
 			
 		 y += (x[j] * b[i]);
 	}
+	
+	newest--;
+	// Wrap around to other side of buffer
+	if (newest < 0)
+		newest = BUFSIZE - 1;
 }
 
 void circ_FIR2(void)
 {
 	int i;
 	y = 0;
-	x[newest] = sample; // Read newest sample into buffer
+	x[newest] = mono_read_16Bit(); // Read newest sample into buffer
+	
 	
 	// Split convoluton into two loops
 	for (i = 0; i < BUFSIZE - newest; i++)
 		y += (x[newest+i] * b[i]);
 		
 	for (; i < BUFSIZE; i++)
-		y += (x[i-newest] * b[i]);
+		y += (x[i-(BUFSIZE - newest)] * b[i]);
 		
 	newest--;
 	// Wrap around to other side of buffer
 	if (newest < 0)
 		newest = BUFSIZE - 1;
+	
 }
