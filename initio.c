@@ -24,7 +24,7 @@
 #include <stdlib.h> 
 //  Included so program can make use of DSP/BIOS configuration tool.  
 #include "dsp_bios_cfg.h"
-#include "math.h"
+
 /* The file dsk6713.h must be included in every program that uses the BSL.  This 
    example also includes dsk6713_aic23.h because it uses the 
    AIC23 codec module (audio interface). */
@@ -86,6 +86,10 @@ void circ_FIR1(void);
 void circ_FIR2(void);
 void circ_FIR3(void);
 void circ_FIR4(void);
+void circ_FIR5(void);
+void circ_FIR6(void);
+void circ_FIR7(void);
+
 /********************************** Main routine ************************************/
 void main(){      
 	int i;
@@ -150,6 +154,7 @@ void ISR_AIC(void)
 	sample = mono_read_16Bit();
 	
 	circ_FIR4();
+	
 	  
 	mono_write_16Bit((short)y); 
 }
@@ -226,22 +231,27 @@ void circ_FIR3(void)
 		newest = BUFSIZE -1;		
 }
 
+// symmetrical circular buffer 
 void circ_FIR4(void)
 {
-	int i, j, offset;
+	int i, j, k;
 	y = 0;
 	x[newest] = sample;
+	j = newest;
 	
- 	for (i = 0, j = newest; i < BUFSIZE/2; i++,j--)
+ 	for (i = 0, k = newest - 1; i < BUFSIZE/2; i++, k--)
 	{
+		if(k < 0)
+			k += BUFSIZE;
+			
 		if (j >= BUFSIZE)
 			j -= BUFSIZE;
-		
-		offset = pow(2,i+1)-1;
-		/*if(j - offset )
-		*/
-		y += ((x[j] + x[j-offset]) * b[i]);
+			
+		y += ((x[j] + x[k]) * b[i]);
+		j++;
 	}
+	
+	// If odd number of coeffs, centre value will be duplicated, so subtract it once
 	if (!(BUFSIZE % 2))
 	{
 		y -= x[j]* b[i];
@@ -249,4 +259,94 @@ void circ_FIR4(void)
 	// Wrap around to other side of buffer
 	if (--newest < 0)
 		newest = BUFSIZE - 1;
+}
+
+//Optimised verison of 1
+void circ_FIR5(void)
+{
+	
+	int i;
+	
+	double *x_limit = x + BUFSIZE;
+	double *x_ptr = x + newest;// + newest;
+	double *b_ptr = b;
+	register double temp =  sample * *b_ptr++;
+	*x_ptr++ = sample;
+	
+	for (i = 1; i < BUFSIZE; i++)
+	{
+		if (x_ptr >= x_limit)
+			x_ptr -= BUFSIZE;
+			
+		 temp += (*x_ptr++ * *b_ptr++);
+	}
+	y = temp;
+	// Wrap around to other side of buffer
+	if (--newest < 0)
+		newest = BUFSIZE - 1;
+}
+
+//Optimised version of 4
+void circ_FIR6(void)
+{
+	/*int i, j, k;
+	y = 0;
+	x[newest] = sample;
+	*/
+		
+	int i;
+	double *j;
+	double *k;
+	double *x_limit = x + BUFSIZE;
+	double *x_ptr = x + newest;// + newest;
+	double *b_ptr = b;
+	register double temp =  sample * *b_ptr++;
+	*x_ptr++ = sample;
+	
+ 	for (i = 0, j = x_ptr, k = x_ptr -1; i < BUFSIZE/2; i++, j++, k--)
+	{
+		if(k < x)
+			k += BUFSIZE;
+			
+		if (j >= x_limit)
+			j -= BUFSIZE;
+			
+		temp += ((*j + *k) * *(b_ptr + i));
+	}
+	
+	// If odd number of coeffs, centre value will be duplicated, so subtract it once
+	if (!(BUFSIZE % 2))
+	{
+		temp -= *j * *(b_ptr + i);
+	}
+	
+	y = temp;
+	// Wrap around to other side of buffer
+	if (--newest < 0)
+		newest = BUFSIZE - 1;
+}
+
+//Optimisation of 2
+void circ_FIR7(void)
+{
+	int i;
+	double *x_limit = x + BUFSIZE;
+	double *x_ptr = x + newest;// + newest;
+	double *b_ptr = b;
+	register double temp =  sample * *b_ptr++;
+	*x_ptr++ = sample;
+	
+	
+	// Split convoluton into two loops
+	for (i = 1; i < BUFSIZE - newest; i++)
+		temp += (*x_ptr++ * *b_ptr++);
+		
+	for (; i < BUFSIZE; i++)
+		temp += (*(x_ptr++ - BUFSIZE) * *b_ptr++);
+		
+	y = temp;
+	// Wrap around to other side of buffer
+	if (--newest < 0)
+		newest = BUFSIZE - 1;
+	
 }
