@@ -10,7 +10,7 @@
 freqStop1 = 375;
 freqPass1 = 450;
 freqPass2 = 1600;
-freqStop2 = 1750;
+freqStop2 = 1700;
 
 % Specufying the desired amplitudes at the stopbands/passband
 % The ampStop values are the amplitudes until the first cutoff and after
@@ -24,8 +24,8 @@ ampStop2 = 0;
 
 % Specifying the deired amplitude deviation at the stopbands/passband
 % Same explanation as aboe for why there are 3 values.
-devStop_dB = -48;
-devPass_dB = 0.4;
+devStop_dB = -52;
+devPass_dB = 0.36;
 
 % Convering dB to absolute values
 devStop1 = 10^(devStop_dB/20);
@@ -49,7 +49,7 @@ fs = 8000;
 
 % row vector of n+1 coefficients of the order n FIR filter whose 
 % frequency-amplitude characteristics match those given by vectors f and a
-order = n+4;
+order = n+8;
 b = firpm(order, fo, ao, w);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
