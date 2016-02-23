@@ -39,6 +39,8 @@
 
 // Size of delay buffer = size of coefs array = total bytes/bytes of 1 element
 #define BUFSIZE sizeof(b)/sizeof(b[0])
+#define ODD_ORDER BUFSIZE%2
+
 /******************************* Global declarations ********************************/
 
 /* Audio port configuration settings: these values set registers in the AIC23 audio 
@@ -76,7 +78,11 @@ double y;
 // Input read from signal generator
 short sample;
 
+// Index for most recent piece of data
+// Initialised to end of buffer
 int newest = BUFSIZE - 1;
+
+
 /******************************* Function prototypes ********************************/
 void init_hardware(void);     
 void init_HWI(void);          
@@ -89,25 +95,27 @@ void circ_FIR4(void);
 void circ_FIR5(void);
 void circ_FIR6(void);
 void circ_FIR7(void);
-
+void circ_FIR8_odd(void);
+void circ_FIR8_even(void);
+void circ_FIR9_odd(void);
 /********************************** Main routine ************************************/
-void main(){      
-	int i;
+void main(){   
+	int q;
 // initialize board and the audio port
  	init_hardware();
 	
   /* initialize hardware interrupts */
 	init_HWI();  	 		
 	
-	for(i = 0; i < BUFSIZE; i++)
+	for(q = 0; q < BUFSIZE; q++)
 	{
-		x[i] = 0;
-		x2[i] = 0;
+		x[q] = 0;
+		x2[q] = 0;
 	}
   /* loop indefinitely, waiting for interrupts */  					
 	while(1){}
   
-}
+}  
         
 /********************************** init_hardware() **********************************/  
 void init_hardware()
@@ -153,9 +161,13 @@ void ISR_AIC(void)
 {	
 	sample = mono_read_16Bit();
 	
-	circ_FIR4();
-	
-	  
+	circ_FIR3();
+	/*
+	if(ODD_ORDER)
+		circ_FIR8_odd();
+	else
+		circ_FIR8_even();
+	  */
 	mono_write_16Bit((short)y); 
 }
 
@@ -177,6 +189,7 @@ void non_circ_FIR(void)
 // Normal circle
 void circ_FIR1(void)
 {
+	
 	
 	int i, j;
 	y = 0;
@@ -237,9 +250,9 @@ void circ_FIR4(void)
 	int i, j, k;
 	y = 0;
 	x[newest] = sample;
-	j = newest;
 	
- 	for (i = 0, k = newest - 1; i < BUFSIZE/2; i++, k--)
+	
+ 	for (i = 0, k = newest - 1, j = newest; i < BUFSIZE/2; i++, k--, j++)
 	{
 		if(k < 0)
 			k += BUFSIZE;
@@ -248,7 +261,7 @@ void circ_FIR4(void)
 			j -= BUFSIZE;
 			
 		y += ((x[j] + x[k]) * b[i]);
-		j++;
+		
 	}
 	
 	// If odd number of coeffs, centre value will be duplicated, so subtract it once
@@ -261,14 +274,14 @@ void circ_FIR4(void)
 		newest = BUFSIZE - 1;
 }
 
-//Optimised verison of 1
+//Optimised verison of 1 (normal circular)
 void circ_FIR5(void)
 {
 	
 	int i;
 	
 	double *x_limit = x + BUFSIZE;
-	double *x_ptr = x + newest;// + newest;
+	double *x_ptr = x + newest;
 	double *b_ptr = b;
 	register double temp =  sample * *b_ptr++;
 	*x_ptr++ = sample;
@@ -286,7 +299,7 @@ void circ_FIR5(void)
 		newest = BUFSIZE - 1;
 }
 
-//Optimised version of 4
+//Optimised version of 4 (Symmetrical circular)
 void circ_FIR6(void)
 {
 	/*int i, j, k;
@@ -326,11 +339,10 @@ void circ_FIR6(void)
 		newest = BUFSIZE - 1;
 }
 
-//Optimisation of 2
+//Optimisation of 2 (Split loop)
 void circ_FIR7(void)
 {
 	int i;
-	double *x_limit = x + BUFSIZE;
 	double *x_ptr = x + newest;// + newest;
 	double *b_ptr = b;
 	register double temp =  sample * *b_ptr++;
@@ -349,4 +361,93 @@ void circ_FIR7(void)
 	if (--newest < 0)
 		newest = BUFSIZE - 1;
 	
+}
+
+// Non pointer optimised of 4 (symmetrical circular)
+void circ_FIR8_odd(void)
+{
+	int i, j, k;
+	y = 0;
+	x[newest] = sample; 
+	
+ 	for (i = 0, j = newest, k = newest - 1; i < BUFSIZE/2; i++, k--, j++)
+	{
+		if(k < 0)
+			k += BUFSIZE;
+			
+		if (j >= BUFSIZE)
+			j -= BUFSIZE;
+			
+		y += ((x[j] + x[k]) * b[i]);
+		
+	}
+	
+	// If odd number of coeffs, centre value will be duplicated, so subtract it once
+	y += x[BUFSIZE/2]* b[i];
+	
+	// Wrap around to other side of buffer
+	if (--newest < 0)
+		newest = BUFSIZE - 1;
+}
+// Non pointer optimised of 4 (symmetrical circular)
+void circ_FIR8_even(void)
+{
+	int i, j, k;
+	y = 0;
+	x[newest] = sample;
+	
+	
+ 	for (i = 0, j = newest, k = newest - 1; i < BUFSIZE/2; i++, k--, j++)
+	{
+		if(k < 0)
+			k += BUFSIZE;
+			
+		if (j >= BUFSIZE)
+			j -= BUFSIZE;
+			
+		y += ((x[j] + x[k]) * b[i]);
+	}
+	
+	// Wrap around to other side of buffer
+	if (--newest < 0)
+		newest = BUFSIZE - 1;
+} 
+
+//Extra optimised of 4 (split-loop symmetrical circular)
+void circ_FIR9_odd(void)
+{
+	int i, j, k;
+	y = 0;
+	x[newest] = sample;
+	
+	if(newest > BUFSIZE/2)
+	{
+		for(i = 0, j = newest, k = newest - 1; i < BUFSIZE - newest; i++, k--, j++)
+		{
+		 	y += ((x[j] + x[k]) * b[i]);
+		}
+		
+		for(j = 0; i < BUFSIZE/2; i++, k--, j++)
+		{
+			y += ((x[j] + x[k]) * b[i]);
+		}
+	}
+	
+	else
+	{
+		for(i = 0, j = newest, k = newest - 1; i < newest; i++, k--, j++)
+		{
+			y += ((x[j] + x[k]) * b[i]);
+		}
+		for(k = BUFSIZE - 1; i < BUFSIZE/2; i++, k--, j++)
+		{
+			y += ((x[j] + x[k]) * b[i]);
+		}
+	}
+	
+	
+	if (--newest < 0)
+		newest = BUFSIZE - 1;
+
+		
 }
