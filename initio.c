@@ -68,7 +68,7 @@ DSK6713_AIC23_CodecHandle H_Codec;
 
 
 // Delay buffer
-double x[BUFSIZE];
+short x[BUFSIZE];
 
 double x2[2*BUFSIZE];
 
@@ -81,6 +81,7 @@ short sample;
 // Index for most recent piece of data
 // Initialised to end of buffer
 int newest = BUFSIZE - 1;
+
 
 
 /******************************* Function prototypes ********************************/
@@ -161,13 +162,11 @@ void ISR_AIC(void)
 {	
 	sample = mono_read_16Bit();
 	
-	circ_FIR3();
-	/*
-	if(ODD_ORDER)
-		circ_FIR8_odd();
-	else
-		circ_FIR8_even();
-	  */
+//	if(ODD_ORDER)
+		circ_FIR5();
+	//else
+	//	circ_FIR8_even();
+	  
 	mono_write_16Bit((short)y); 
 }
 
@@ -279,9 +278,9 @@ void circ_FIR5(void)
 {
 	
 	int i;
-	
-	double *x_limit = x + BUFSIZE;
-	double *x_ptr = x + newest;
+
+	short *x_limit = x + BUFSIZE;
+	short *x_ptr = x + newest;
 	double *b_ptr = b;
 	register double temp =  sample * *b_ptr++;
 	*x_ptr++ = sample;
@@ -308,10 +307,10 @@ void circ_FIR6(void)
 	*/
 		
 	int i;
-	double *j;
-	double *k;
-	double *x_limit = x + BUFSIZE;
-	double *x_ptr = x + newest;// + newest;
+	short *j;
+	short *k;
+	short *x_limit = x + BUFSIZE;
+	short *x_ptr = x + newest;// + newest;
 	double *b_ptr = b;
 	register double temp =  sample * *b_ptr++;
 	*x_ptr++ = sample;
@@ -336,17 +335,17 @@ void circ_FIR6(void)
 	y = temp;
 	// Wrap around to other side of buffer
 	if (--newest < 0)
-		newest = BUFSIZE - 1;
+		newest = BUFSIZE - 1; 
 }
 
 //Optimisation of 2 (Split loop)
 void circ_FIR7(void)
 {
 	int i;
-	double *x_ptr = x + newest;// + newest;
+	short *x_ptr = x + newest;// + newest;
 	double *b_ptr = b;
 	register double temp =  sample * *b_ptr++;
-	*x_ptr++ = sample;
+	*x_ptr++ = sample; 
 	
 	
 	// Split convoluton into two loops
@@ -365,12 +364,13 @@ void circ_FIR7(void)
 
 // Non pointer optimised of 4 (symmetrical circular)
 void circ_FIR8_odd(void)
+
 {
 	int i, j, k;
 	y = 0;
 	x[newest] = sample; 
 	
- 	for (i = 0, j = newest, k = newest - 1; i < BUFSIZE/2; i++, k--, j++)
+ 	for (i = 0, j = newest, k = newest - 1; j != k; i++, k--, j++)
 	{
 		if(k < 0)
 			k += BUFSIZE;
