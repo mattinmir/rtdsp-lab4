@@ -10,7 +10,7 @@
 freqStop1 = 375;
 freqPass1 = 450;
 freqPass2 = 1600;
-freqStop2 = 1750;
+freqStop2 = 1735; %1735;
 
 % Specufying the desired amplitudes at the stopbands/passband
 % The ampStop values are the amplitudes until the first cutoff and after
@@ -24,13 +24,13 @@ ampStop2 = 0;
 
 % Specifying the deired amplitude deviation at the stopbands/passband
 % Same explanation as aboe for why there are 3 values.
-devStop_dB = -48; 
-devPass_dB = 0.395; 
+devStop_dB = -48;
+devPass_dB = 0.36; %0.36
 
 % Convering dB to absolute values
-devStop1 = 10^(devStop_dB/20);
-devPass = (10^(devPass_dB/20)-1)/(10^(devPass_dB/20)+1);
-devStop2 = 10^(devStop_dB/20);
+devStop1 =  0.0036; %10^(devStop_dB/20)devstop try -48.9 0.0036; 
+devPass =  0.02; %  (10^(devPass_dB/20)-1)/(10^(devPass_dB/20)+1);
+devStop2 =  0.0036; % 10^(devStop_dB/20);
 
 % Sampling frequency
 fs = 8000;
@@ -49,7 +49,7 @@ fs = 8000;
 
 % row vector of n+1 coefficients of the order n FIR filter whose 
 % frequency-amplitude characteristics match those given by vectors f and a
-order = n+4;
+order = n; %n+4
 b = firpm(order, fo, ao, w);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -72,3 +72,5 @@ fclose(fileID);
 
 % Plotting freq response
 freqz(b,1,1024,fs);
+title('Frequency response')
+print('Frequency respone' , '-dpng')
