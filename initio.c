@@ -274,10 +274,10 @@ void circ_FIR4(void)
 		
 	}
 	
-	// If odd number of coeffs, centre value will be duplicated, so subtract it once
+	// If odd number of coeffs, centre value will be missed, so add it once
 	if (!(BUFSIZE % 2))
 	{
-		y -= x[j]* b[i];
+		y += x[j]* b[i];
 	}
 	// Wrap around to other side of buffer
 	if (--newest < 0)
@@ -337,10 +337,10 @@ void circ_FIR6(void)
 		temp += ((*j + *k) * *(b_ptr + i));
 	}
 	
-	// If odd number of coeffs, centre value will be duplicated, so subtract it once
+	// If odd number of coeffs, centre value will be missed, so add it once
 	if (!(BUFSIZE % 2))
 	{
-		temp -= *j * *(b_ptr + i);
+		temp += *j * *(b_ptr + i);
 	}
 	
 	y = temp;
@@ -392,7 +392,7 @@ void circ_FIR8_odd(void)
 		
 	}
 	
-	// If odd number of coeffs, centre value will be duplicated, so subtract it once
+	// If odd number of coeffs, centre value will be missed, so add it once
 	y += x[BUFSIZE/2]* b[i];
 	
 	// Wrap around to other side of buffer
