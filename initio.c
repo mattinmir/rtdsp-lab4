@@ -39,7 +39,7 @@
 
 // Size of delay buffer = size of coefs array = total bytes/bytes of 1 element
 #define BUFSIZE sizeof(b)/sizeof(b[0])
-#define ODD_ORDER BUFSIZE%2
+#define ODD_COEF_LENGTH BUFSIZE%2
 
 /******************************* Global declarations ********************************/
 
@@ -110,7 +110,7 @@ void main(){
   /* initialize hardware interrupts */
 	init_HWI();  	 		
 	
-	for(q = 0; q < BUFSIZE; q++) 
+	for(q = 0; q < BUFSIZE; q++)
 	{
 		x[q] = 0;
 		x2[q] = 0;
@@ -164,7 +164,7 @@ void ISR_AIC(void)
 {	
 	sample = mono_read_16Bit();
 	
-//	if(ODD_ORDER)
+	//if(ODD_COEF_LENGTH)
 		circ_FIR10_odd();
 	//else
 	//	circ_FIR8_even();
@@ -191,29 +191,30 @@ void non_circ_FIR(void)
 	// must be set to zero before each operation 
 	y=0;
 	for (i = BUFSIZE; i >= 0; i--)
-	{
 		y += (x[i] * b[i]);
-	}	
 }
 
 // Normal circle
 void circ_FIR1(void)
 {
-	
-	
 	unsigned int i, j;
 	y = 0;
+	
+	// Read newest sample into buffer
 	x[newest] = sample;
 	
+	// Iterate over data and filter buffers performing MAC
 	for (i = 0, j = newest; i < BUFSIZE; i++,j++)
 	{
+		// Loop index to beginning of array if there is overflow
 		if (j >= BUFSIZE)
 			j -= BUFSIZE;
 			
 		 y += (x[j] * b[i]);
 	}
 	
-	// Wrap around to other side of buffer
+	// Decrement pointer for next new data
+	// If underflow occurs, wrap around to other side of buffer 
 	if (--newest < 0)
 		newest = BUFSIZE - 1;
 }
@@ -223,21 +224,21 @@ void circ_FIR2(void)
 {
 	unsigned int i;
 	y = 0;
-	x[newest] = sample; // Read newest sample into buffer
 	
+	// Read newest sample into buffer
+	x[newest] = sample; 
 	
-	// Split convoluton into two loops
+	// Split convoluton into two loops to save overhead of if statement
 	for (i = 0; i < BUFSIZE - newest; i++)
 		y += (x[newest+i] * b[i]);
-		
+	
+	// No need to initialise i again as it is already at the correct value
 	for (; i < BUFSIZE; i++)
 		y += (x[i-(BUFSIZE - newest)] * b[i]);
-		
 	
 	// Wrap around to other side of buffer
 	if (--newest < 0)
 		newest = BUFSIZE - 1;
-	
 }
 
 // Double size buffer
@@ -245,77 +246,100 @@ void circ_FIR3(void)
 {
 	unsigned int i;
 	y = 0;
+	
+	// Read newest sample into buffer at newest index and offset index
 	x2[newest] = x2[newest + BUFSIZE] = sample;
 	
+	// Since any stretch of BUFSIZE elements will contain all the data values,
+	// we can perform the convolution in one pass and not have to worry
+	// about accounting for index overflow
 	for(i = 0; i < BUFSIZE; i++)
 		y += x2[newest +i]*b[i];
-	
+		
+	// Decrement pointer for next new data
+	// If underflow occurs, wrap around to other side of buffer 
 	if(--newest < 0)
 		newest = BUFSIZE -1;		
 }
 
-// symmetrical circular buffer 
+// Symmetrical circular buffer 
 void circ_FIR4(void)
 {
-	unsigned int i, j, k;
+	unsigned int i, j;
+	int k;
 	y = 0;
+	
+	// Read newest sample into buffer
 	x[newest] = sample;
 	
-	
- 	for (i = 0, k = newest - 1, j = newest; i < BUFSIZE/2; i++, k--, j++)
+	// Filter buffer is symmertical, so only need to use the first half of the values
+	// and condense convolution into 
+	// b[0]*(x[0]+x[BUFSIZE-1]) + b[1]*(x[1]+x[BUFSIZE-2]) + ...
+ 	for (i = 0, j = newest, k = newest - 1; i < BUFSIZE/2; i++, j++, k--)
 	{
+		// Checking for under/overflow of indexes
 		if(k < 0)
 			k += BUFSIZE;
 			
 		if (j >= BUFSIZE)
 			j -= BUFSIZE;
 			
+		// Perform MAC
 		y += ((x[j] + x[k]) * b[i]);
-		
 	}
 	
 	// If odd number of coeffs, centre value will be missed, so add it once
 	if (!(BUFSIZE % 2))
-	{
 		y += x[j]* b[i];
-	}
-	// Wrap around to other side of buffer
+		
+	// Decrement pointer for next new data
+	// If underflow occurs, wrap around to other side of buffer 
 	if (--newest < 0)
 		newest = BUFSIZE - 1;
 }
 
-//Optimised verison of 1 (normal circular)
+// Optimised verison of circ_FIR1 (normal circular)
 void circ_FIR5(void)
 {
+	unsigned int i;
 	
-	int i;
-
+	// Pointer used for bounds check
 	short *x_limit = x + BUFSIZE;
+	
 	short *x_ptr = x + newest;
 	double *b_ptr = b;
-	register double temp =  sample * *b_ptr++;
-	*x_ptr++ = sample;
 	
+	// Value kept in regster to decrease access times
+	// Post-increment the pointers to put them at the correct position for new data
+	// Accumulator (temp) is initialised with result from first iteration
+	// instead of 0, to save cycles from unnecessary operation
+	register double temp =  sample * *b_ptr++;
+	*x_ptr++ = sample; 
+	
+	// Iterate over data and filter buffers performing MAC
 	for (i = 1; i < BUFSIZE; i++)
 	{
+		// Loop pointer to beginning of array if there is overflow
 		if (x_ptr >= x_limit)
 			x_ptr -= BUFSIZE;
 			
 		 temp += (*x_ptr++ * *b_ptr++);
 	}
 	y = temp;
-	// Wrap around to other side of buffer
+	
+	// Decrement pointer for next new data
+	// If underflow occurs, wrap around to other side of buffer 
 	if (--newest < 0)
 		newest = BUFSIZE - 1;
 }
 
 //Optimised version of 4 (Symmetrical circular)
-void circ_FIR6(void)
+/*void circ_FIR6(void)
 {
 	/*int i, j, k;
 	y = 0;
 	x[newest] = sample;
-	*/
+	
 		
 	unsigned int i;
 	short *j;
@@ -337,18 +361,19 @@ void circ_FIR6(void)
 		temp += ((*j + *k) * *(b_ptr + i));
 	}
 	
-	// If odd number of coeffs, centre value will be missed, so add it once
+	// If odd number of coeffs, centre value will be duplicated, so subtract it once
 	if (!(BUFSIZE % 2))
 	{
-		temp += *j * *(b_ptr + i);
+		temp -= *j * *(b_ptr + i);
 	}
 	
 	y = temp;
 	// Wrap around to other side of buffer
 	if (--newest < 0)
 		newest = BUFSIZE - 1; 
-}
+}*/
 
+/*
 //Optimisation of 2 (Split loop)
 void circ_FIR7(void)
 {
@@ -372,7 +397,8 @@ void circ_FIR7(void)
 		newest = BUFSIZE - 1;
 	
 }
-
+*/
+/*
 // Non pointer optimised of 4 (symmetrical circular)
 void circ_FIR8_odd(void)
 {
@@ -392,7 +418,7 @@ void circ_FIR8_odd(void)
 		
 	}
 	
-	// If odd number of coeffs, centre value will be missed, so add it once
+	// If odd number of coeffs, centre value will be duplicated, so subtract it once
 	y += x[BUFSIZE/2]* b[i];
 	
 	// Wrap around to other side of buffer
@@ -422,104 +448,115 @@ void circ_FIR8_even(void)
 	if (--newest < 0)
 		newest = BUFSIZE - 1;
 } 
+*/
 
-//Extra optimised of 4 (split-loop symmetrical circular)
+// Combination of circ_FIR2 and circ_FIR4 (split-loop and symmetrical circular)
 void circ_FIR9_even(void)
 {
 	unsigned int i, j, k; 
 	y = 0;
 	x[newest] = sample;
 	
+	// If newest data is in the second half of the buffer, then j will overflow
 	if(newest > BUFSIZE/2)
 	{
+		// j will overflow at BUFSIZE - newest
 		for(i = 0, j = newest, k = newest - 1; i < BUFSIZE - newest; i++, k--, j++)
-		{
 		 	y += ((x[j] + x[k]) * b[i]);
-		}
 		
+		// When j overflows, set it to the start of the array
 		for(j = 0; i < BUFSIZE/2; i++, k--, j++)
-		{
 			y += ((x[j] + x[k]) * b[i]);
-		}
 	}
 	
+	// If newest data is in the first half of the buffer, then k will underflow
 	else
 	{
+		// k will underflow when it decrements past 0
 		for(i = 0, j = newest, k = newest - 1; i < newest; i++, k--, j++)
-		{
 			y += ((x[j] + x[k]) * b[i]);
-		}
+			
+		// When k underflows, set it to the end of the array 
 		for(k = BUFSIZE - 1; i < BUFSIZE/2; i++, k--, j++)
-		{
 			y += ((x[j] + x[k]) * b[i]);
-		}
+		
 	}
 	
-	
+	// Decrement pointer for next new data
+	// If underflow occurs, wrap around to other side of buffer 
 	if (--newest < 0)
 		newest = BUFSIZE - 1;
 
 		
 }
 
+// Combination of circ_FIR2 and circ_FIR4 (split-loop and symmetrical circular)
 void circ_FIR9_odd(void)
 {
 	unsigned int i, j, k; 
 	y = 0;
 	x[newest] = sample;
 	
+	// If newest data is in the second half of the buffer, then j will overflow
 	if(newest > BUFSIZE/2)
 	{
+		// j will overflow at BUFSIZE - newest
 		for(i = 0, j = newest, k = newest - 1; i < BUFSIZE - newest; i++, k--, j++)
-		{
 		 	y += ((x[j] + x[k]) * b[i]);
-		}
-		
+				
+		// When j overflows, set it to the start of the array
 		for(j = 0; i < BUFSIZE/2; i++, k--, j++)
-		{
-			y += ((x[j] + x[k]) * b[i]);
-		}
-		y+= (x[j] * b[BUFSIZE/2]);
+			y += ((x[j] + x[k]) * b[i]);			
 	}
 	
 	
-	
+	// If newest data is in the first half of the buffer, then k will underflow
 	else
 	{
-		for(i = 0, j = newest, k = newest - 1; i < newest; i++, k--, j++)
-		{
+		// k will underflow when it decrements past 0
+		for(i = 0, j = newest, k = newest - 1; i < newest; i++, j++, k--)
 			y += ((x[j] + x[k]) * b[i]);
-		}
+				
+		// When k underflows, set it to the end of the array 
 		for(k = BUFSIZE - 1; i < BUFSIZE/2; i++, k--, j++)
-		{
 			y += ((x[j] + x[k]) * b[i]);
-		}
-		y+= (x[j] * b[BUFSIZE/2]);
 	}
 	
+	// If odd number of coeffs, centre value will be missed, so add it once
+	y+= (x[j] * b[BUFSIZE/2]);
 	
+	// Decrement pointer for next new data
+	// If underflow occurs, wrap around to other side of buffer 
 	if (--newest < 0)
 		newest = BUFSIZE - 1;
 
 }		
 
-
+// Combination of circ_FIR3 and circ_FIR4 (double buffer and symmetrical circular)
 void circ_FIR10_odd(void)
 {
 	unsigned int i, j, k; 
 	y = 0;
 	
+	// Read newest sample into buffer at newest index and offset index
 	x2[newest] = sample;   
 	x2[newest + BUFSIZE] = x[newest];
-	
 
-	for(i = 0, j = newest, k =BUFSIZE + newest - 1; i < BUFSIZE/2; i++, k--, j++)
-	{
-	 	y += ((x2[j] + x2[k]) * b[i]);
-	}
+	// Since any stretch of BUFSIZE elements will contain all the data values,
+	// we can perform the convolution in one pass and not have to worry
+	// about accounting for index overflow
 	
+	// Filter buffer is symmertical, so only need to use the first half of the values
+	// and condense convolution into 
+	// b[0]*(x2[0]+x2[BUFSIZE/2-1]) + b[1]*(x2[1]+x2[BUFSIZE/2-2]) + ...
+	for(i = 0, j = newest, k = BUFSIZE + newest - 1; i < BUFSIZE/2; i++, j++, k--)
+	 	y += ((x2[j] + x2[k]) * b[i]);
+		
+	// If odd number of coeffs, centre value will be missed, so add it once
 	y+= (x2[j] * b[BUFSIZE/2]);
 	
+	// Decrement pointer for next new data
+	// If underflow occurs, wrap around to other side of buffer 
 	if (--newest < 0)
 		newest = BUFSIZE - 1;
 }
@@ -529,16 +566,22 @@ void circ_FIR10_even(void)
 	unsigned int i, j, k; 
 	y = 0;
 	
+	// Read newest sample into buffer at newest index and offset index
 	x2[newest] = sample;   
 	x2[newest + BUFSIZE] = x[newest];
-	
 
-	for(i = 0, j = newest, k =BUFSIZE + newest - 1; i < BUFSIZE/2; i++, k--, j++)
-	{
+	// Since any stretch of BUFSIZE elements will contain all the data values,
+	// we can perform the convolution in one pass and not have to worry
+	// about accounting for index overflow
+	
+	// Filter buffer is symmertical, so only need to use the first half of the values
+	// and condense convolution into 
+	// b[0]*(x2[0]+x2[BUFSIZE/2-1]) + b[1]*(x2[1]+x2[BUFSIZE/2-2]) + ...
+	for(i = 0, j = newest, k = BUFSIZE + newest - 1; i < BUFSIZE/2; i++, k--, j++)
 	 	y += ((x2[j] + x2[k]) * b[i]);
-	}
 	
-	
+	// Decrement pointer for next new data
+	// If underflow occurs, wrap around to other side of buffer 
 	if (--newest < 0)
 		newest = BUFSIZE - 1;
 }
